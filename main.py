@@ -87,12 +87,17 @@ def find_reference_context(file_path: str, search_roots=None) -> str:
             continue
         for candidate in candidates:
             try:
+                # Files over a megabyte are skipped with no note in the result. A reference living
+                # in one large file reads exactly like no references found.
                 if os.path.getsize(candidate) > 1048576:
                     continue
                 with open(candidate, "r", errors="ignore") as handle:
                     text = handle.read()
             except OSError:
                 continue
+            # The basename fallback is the noisy half of this search. A file named config or app
+            # matches any passing mention of that word, so a Referenced by line can mean only
+            # that the name is a common one.
             if full_path in text or (base_name and base_name in text):
                 found.append(candidate)
     if found:
@@ -123,6 +128,8 @@ def analyze_file_permissions(file_path: str, check_uid: int = None, check_gid: i
         return None
     
     try:
+        # os.stat follows symlinks, so for a link I report the target's owner and mode, never the
+        # link's own. A tree full of links reads as a report about its targets.
         stat_info = os.stat(file_path)
         uid = stat_info.st_uid
         gid = stat_info.st_gid
@@ -141,6 +148,8 @@ def analyze_file_permissions(file_path: str, check_uid: int = None, check_gid: i
             "permissions": permissions,
             "owner_uid": uid,
             "owner_gid": gid,
+            # Context here means text references only. I rescan the search roots from scratch for
+            # every file, and ACLs or extended attributes on the file never enter the picture.
             "context": find_reference_context(file_path, search_roots)
         }
 
@@ -185,6 +194,8 @@ def analyze_directory_permissions(dir_path: str, recursive: bool = False, check_
                     results.append(file_context)
             elif os.path.isdir(item_path):
                 if recursive:
+                    # This recursion follows symlinked directories with no visited set. A link pointing
+                    # back into its own tree sends me around until something gives up.
                     results.extend(analyze_directory_permissions(item_path, recursive, check_uid, check_gid, search_roots))
                 else:
                     dir_context = analyze_file_permissions(item_path, check_uid, check_gid, search_roots)
