@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pa Permission Context Analyzer: what it is, how it runs, where it stops</title>
+<meta name="description" content="Context is found with the optional repeatable --search-root argument, which names a script or configuration tree to scan for references to each analyz">
+<style>
+:root {
+  --bg: #080c0a; --panel: #0d1410; --ink: #d9e8dd;
+  --mut: #111b15;
+  --acc: #57e389; --acc2: #e8b339;
+  --line: #0d1410;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink);
+  font-family: 'Book Antiqua', Georgia, serif; line-height: 1.55; }
+code, pre, .mono { font-family: 'Andale Mono', monospace; }
+a { color: var(--acc2); }
+.hero { padding: 3rem 6vw 1rem; }
+.hero img.banner { width: 100%; height: auto; border: 1px solid var(--line);
+  border-radius: 10px; }
+.logo { width: 92px; height: 92px; border-radius: 18px;
+  border: 1px solid var(--line); }
+h1 { font-size: 2.4rem; margin: 0.4em 0 0.1em; }
+h2 { border-bottom: 2px solid var(--acc); padding-bottom: 0.2em;
+  margin-top: 2em; }
+.lede { font-size: 1.15rem; max-width: 62ch; }
+main { padding: 0 6vw 3rem; max-width: 1180px; margin: 0 auto; }
+.grid { display: grid; gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); }
+.card { background: var(--panel); border: 1px solid var(--line);
+  border-radius: 12px; padding: 1rem 1.2rem; }
+.card.pop { animation: rise 0.7s ease both; }
+@keyframes rise { from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: none; } }
+pre.code { background: #101014; color: #e8e6df; padding: 1rem 1.2rem;
+  border-radius: 12px; overflow-x: auto; font-size: 0.86rem;
+  border-left: 5px solid var(--acc); }
+table { border-collapse: collapse; width: 100%; }
+td, th { border-bottom: 1px solid var(--line); padding: 0.45rem 0.6rem;
+  text-align: left; }
+.shots { display: grid; gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+.shots img { width: 100%; height: auto; border: 1px solid var(--line);
+  border-radius: 10px; background: #f4f1e8; }
+footer { padding: 2rem 6vw; border-top: 1px solid var(--line);
+  color: var(--mut); }
+.rail { display: flex; gap: 1.2rem; align-items: flex-start; }
+.rail nav { position: sticky; top: 1rem; min-width: 180px; }
+@media (max-width: 760px) { .rail { flex-direction: column; }
+  .rail nav { position: static; } }
+@media (prefers-reduced-motion: reduce) {
+  .card.pop { animation: none; } * { scroll-behavior: auto; } }
+</style>
+</head>
+<body class="layout-note">
+<!-- This page exists for pa-permission-context-analyzer alone: the layout (notebook),
+     the colors, and the type were picked for this project, not
+     shared with the other project pages. The code block below is
+     copied from the file it names, line for line. If it looks
+     plain, that is because the project is plain, and I would
+     rather the page match the project than dress it up. The one
+     thing I will not do here is oversell: what this project does
+     not do is stated on the page, not hidden from it. -->
+<header class="hero">
+  <img class="logo" src="assets/logo.png" alt="Pa Permission Context Analyzer logo">
+  <img class="banner" src="assets/banner.png" alt="">
+  <h1>Pa Permission Context Analyzer</h1>
+  <p class="mono"><a href="https://github.com/ShadowGuard-AI/pa-permission-context-analyzer">github.com/ShadowGuard-AI/pa-permission-context-analyzer</a></p>
+</header>
+
+<main>
+  <section class="rail">
+    <nav aria-label="on this page">
+      <p class="mono"><a href="#run">Run it</a><br>
+      <a href="#files">The files</a><br>
+      <a href="#sheets">The sheets</a><br>
+      <a href="https://github.com/ShadowGuard-AI/pa-permission-context-analyzer">The repo</a></p>
+    </nav>
+    <div>
+      <p class="lede">Context is found with the optional repeatable --search-root argument, which names a script or configuration tree to scan for references to each analyzed path. A reference is a match on the full path or on the file name. The context field reports the referencing files found, or states that no referen</p>
+      <div class="grid">
+        <div class="card pop"><h3>What it is</h3>
+          <p>Pa Permission Context Analyzer: 6 files, 374 counted
+          lines across Python 347, Markdown 26, Text 1. One job, done in the
+          open, in files you can read.</p></div>
+        <div class="card pop"><h3>The biggest piece</h3>
+          <p><code>main.py</code> carries the most
+          lines. If the project grows, that file is where the growth
+          lands first, for better or worse.</p></div>
+        <div class="card pop"><h3>The honest gap</h3>
+          <p>No test files yet. That is the honest gap, and the roadmap in the visuals folder says what the first one should cover.</p></div>
+      </div>
+      <section id="run">
+        <h2>Run it</h2>
+        <p>The repo README has the exact commands for this one. The
+        shape is the shape for most of my projects: clone it, read the
+        top file first so you know what will happen, then run it on
+        something you do not mind breaking.</p>
+        <p class="mono">$ git clone https://github.com/ShadowGuard-AI/pa-permission-context-analyzer.git<br>$ cd pa-permission-context-analyzer</p>
+      </section>
+      
+  <section aria-label="real code">
+    <h2>The code, as it sits in the repo</h2>
+    <p>From <code>main.py</code>, line 309 on. I did
+    not tidy it for the page. What you see is what the file has.</p>
+    <pre class="code"><code>    elif os.path.isdir(path_to_analyze):
+        # Determine whether the input held any entries at all.
+        def _count_entries(base):
+            count = 0
+            for dir_path, dir_names, file_names in os.walk(base):
+                count += len(dir_names) + len(file_names)
+            return count
+        input_held_files = _count_entries(path_to_analyze) &gt; 0
+        if input_held_files:
+            results = analyze_directory_permissions(path_to_analyze, args.recursive, args.check_uid, args.check_gid, args.search_root)
+        else:
+            # A directory with no entries at all is a nothing analyzed run.
+            results = []
+    else:
+        print(f&quot;Error: &#x27;{path_to_analyze}&#x27; is neither a file nor a directory.&quot;)
+        sys.exit(1)
+
+    if results:
+        print_results(results)
+        if args.output:
+            write_results_to_file(results, args.output)
+        logging.info(&quot;Analysis completed.&quot;)</code></pre>
+  </section>
+      <section id="files">
+        <h2>The files that matter</h2>
+        <table><tr><th>File</th><th>Lines</th></tr>
+        <tr><td><code>main.py</code></td><td>347</td></tr>
+        </table>
+        <p>Names doing the work: <span class="mono">setup_argparse, find_reference_context, analyze_file_permissions, analyze_directory_permissions, print_results, write_results_to_file, main, _count_entries</span>.</p>
+      </section>
+      <section id="sheets">
+        <h2>Drawn by hand</h2>
+        <p>I sketch my projects on notebook paper so I have to
+        understand them well enough to draw them. The full set,
+        with the counts and how they were counted, is the
+        <a href="https://github.com/ShadowGuard-AI/pa-permission-context-analyzer/tree/main/pa-permission-context-analyzer-Visuals">pa-permission-context-analyzer-Visuals</a>
+        folder in the repo. Nothing is drawn over the binder holes.
+        That is a rule, not a style.</p>
+        <div class="shots">
+          <img src="assets/architecture.png" alt="Hand drawn architecture sheet for Pa Permission Context Analyzer">
+          <img src="assets/flowchart.png" alt="Hand drawn flowchart sheet for Pa Permission Context Analyzer">
+          <img src="assets/product-map.png" alt="Hand drawn product map sheet for Pa Permission Context Analyzer">
+        </div>
+      </section>
+    </div>
+  </section>
+</main>
+<footer>
+  <p>Pa Permission Context Analyzer is one of my projects. This page was written
+  from the repo itself on 2026-10-30: the counts are the
+  repo's counts, the code is the repo's code, and the gaps are the
+  repo's gaps.</p>
+</footer>
+</body>
+</html>
