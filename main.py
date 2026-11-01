@@ -58,10 +58,49 @@ def setup_argparse() -> argparse.ArgumentParser:
         type=int,
         help="Check usage by specific GID."
     )
+    parser.add_argument(
+        "--search-root",
+        action="append",
+        default=[],
+        metavar="DIR",
+        help="A script or configuration tree to scan for references to each analyzed path. May be given more than once."
+    )
     return parser
 
 
-def analyze_file_permissions(file_path: str, check_uid: int = None, check_gid: int = None) -> Dict[str, Any]:
+def find_reference_context(file_path: str, search_roots=None) -> str:
+    """Scan named search roots for references to a path."""
+    if not search_roots:
+        return "No search roots were named, so no references were searched for."
+    full_path = os.path.abspath(file_path)
+    base_name = os.path.basename(file_path)
+    found = []
+    for root in search_roots:
+        if os.path.isfile(root):
+            candidates = [root]
+        elif os.path.isdir(root):
+            candidates = []
+            for dir_path, _dir_names, file_names in os.walk(root):
+                for name in file_names:
+                    candidates.append(os.path.join(dir_path, name))
+        else:
+            continue
+        for candidate in candidates:
+            try:
+                if os.path.getsize(candidate) > 1048576:
+                    continue
+                with open(candidate, "r", errors="ignore") as handle:
+                    text = handle.read()
+            except OSError:
+                continue
+            if full_path in text or (base_name and base_name in text):
+                found.append(candidate)
+    if found:
+        return "Referenced by: " + ", ".join(sorted(set(found)))
+    return "No references found in the named search roots."
+
+
+def analyze_file_permissions(file_path: str, check_uid: int = None, check_gid: int = None, search_roots=None) -> Dict[str, Any]:
     """
     Analyzes the permissions of a single file.
 
@@ -96,14 +135,13 @@ def analyze_file_permissions(file_path: str, check_uid: int = None, check_gid: i
         permissions = stat.filemode(stat_info.st_mode)
         file_type = "File" if stat.S_ISREG(stat_info.st_mode) else "Directory" if stat.S_ISDIR(stat_info.st_mode) else "Other"
 
-        # Basic context (expand later to analyze which scripts use the file, etc.)
         context = {
             "file_path": file_path,
             "file_type": file_type,
             "permissions": permissions,
             "owner_uid": uid,
             "owner_gid": gid,
-            "context": "No specific context identified (basic analysis)."  # Placeholder, improve later
+            "context": find_reference_context(file_path, search_roots)
         }
 
         return context
@@ -116,7 +154,7 @@ def analyze_file_permissions(file_path: str, check_uid: int = None, check_gid: i
          return None
 
 
-def analyze_directory_permissions(dir_path: str, recursive: bool = False, check_uid: int = None, check_gid: int = None) -> List[Dict[str, Any]]:
+def analyze_directory_permissions(dir_path: str, recursive: bool = False, check_uid: int = None, check_gid: int = None, search_roots=None) -> List[Dict[str, Any]]:
     """
     Analyzes the permissions of files and subdirectories within a directory.
 
@@ -135,15 +173,23 @@ def analyze_directory_permissions(dir_path: str, recursive: bool = False, check_
 
     results = []
     try:
+        own_context = analyze_file_permissions(dir_path, check_uid, check_gid, search_roots)
+        if own_context:
+            results.append(own_context)
         for item in os.listdir(dir_path):
             item_path = os.path.join(dir_path, item)
 
             if os.path.isfile(item_path):
-                file_context = analyze_file_permissions(item_path, check_uid, check_gid)
+                file_context = analyze_file_permissions(item_path, check_uid, check_gid, search_roots)
                 if file_context:  # Only add if not None
                     results.append(file_context)
-            elif os.path.isdir(item_path) and recursive:
-                results.extend(analyze_directory_permissions(item_path, recursive, check_uid, check_gid))
+            elif os.path.isdir(item_path):
+                if recursive:
+                    results.extend(analyze_directory_permissions(item_path, recursive, check_uid, check_gid, search_roots))
+                else:
+                    dir_context = analyze_file_permissions(item_path, check_uid, check_gid, search_roots)
+                    if dir_context:
+                        results.append(dir_context)
     except OSError as e:
         logging.error(f"Error reading directory {dir_path}: {e}")
     except Exception as e:
@@ -223,36 +269,68 @@ def main():
         print(f"Error: Path '{path_to_analyze}' does not exist.")
         sys.exit(1)
 
-    if os.path.isfile(path_to_analyze):
-        result = analyze_file_permissions(path_to_analyze, args.check_uid, args.check_gid)
-        if result:
-            print_results([result])
-            if args.output:
-                write_results_to_file([result], args.output)
+    # In place check: the output file must not be the analyzed file or
+    # a file that will be analyzed inside the analyzed tree.
+    if args.output:
+        output_resolved = os.path.realpath(args.output)
+        analyzed_paths = set()
+        if os.path.isfile(path_to_analyze):
+            analyzed_paths.add(os.path.realpath(path_to_analyze))
+        elif os.path.isdir(path_to_analyze):
+            analyzed_paths.add(os.path.realpath(path_to_analyze))
+            if args.recursive:
+                for dir_path, dir_names, file_names in os.walk(path_to_analyze):
+                    analyzed_paths.add(os.path.realpath(dir_path))
+                    for name in file_names + dir_names:
+                        analyzed_paths.add(os.path.realpath(os.path.join(dir_path, name)))
+            else:
+                for name in os.listdir(path_to_analyze):
+                    analyzed_paths.add(os.path.realpath(os.path.join(path_to_analyze, name)))
+        if output_resolved in analyzed_paths:
+            print("Error: Output file must not be the same as a file being analyzed.")
+            sys.exit(1)
 
+    input_held_files = False
+    if os.path.isfile(path_to_analyze):
+        input_held_files = True
+        result = analyze_file_permissions(path_to_analyze, args.check_uid, args.check_gid, args.search_root)
+        results = [result] if result else []
     elif os.path.isdir(path_to_analyze):
-        results = analyze_directory_permissions(path_to_analyze, args.recursive, args.check_uid, args.check_gid)
-        if results:  #check if results is not empty before printing
-            print_results(results)
-            if args.output:
-                write_results_to_file(results, args.output)
+        # Determine whether the input held any entries at all.
+        def _count_entries(base):
+            count = 0
+            for dir_path, dir_names, file_names in os.walk(base):
+                count += len(dir_names) + len(file_names)
+            return count
+        input_held_files = _count_entries(path_to_analyze) > 0
+        if input_held_files:
+            results = analyze_directory_permissions(path_to_analyze, args.recursive, args.check_uid, args.check_gid, args.search_root)
+        else:
+            # A directory with no entries at all is a nothing analyzed run.
+            results = []
     else:
         print(f"Error: '{path_to_analyze}' is neither a file nor a directory.")
         sys.exit(1)
 
-    logging.info("Analysis completed.")
+    if results:
+        print_results(results)
+        if args.output:
+            write_results_to_file(results, args.output)
+        logging.info("Analysis completed.")
+        return
+
+    # Empty result list: still write the named output file, then exit 1
+    # with a distinct line.
+    if args.output:
+        write_results_to_file([], args.output)
+    if input_held_files:
+        print("No matching files: the filters matched none of the input files.")
+        logging.warning("No matching files.")
+    else:
+        print("Nothing analyzed: the input held no files.")
+        logging.warning("Nothing analyzed.")
+    sys.exit(1)
 
 # Example Usage
 if __name__ == "__main__":
-    # Create a dummy file for demonstration
-    if not os.path.exists("dummy_file.txt"):
-        try:
-           with open("dummy_file.txt", "w") as f:
-               f.write("This is a dummy file for testing.")
-           os.chmod("dummy_file.txt", 0o644)  # Set some basic permissions
-
-        except OSError as e:
-            print(f"Error creating dummy file: {e}")
-            sys.exit(1)
-
     main()
